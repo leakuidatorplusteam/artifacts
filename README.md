@@ -17,9 +17,3 @@ Our classification over collected cache traces can be viewed using the interacti
 [https://colab.research.google.com/github/leakuidatorplusteam/artifacts/blob/main/cache_demo.ipynb](https://colab.research.google.com/github/leakuidatorplusteam/artifacts/blob/main/cache_demo.ipynb)
 
 Each json file contains raw cache traces in target and non-target states for each setup, altogether in the dataset zip file at the root of this repository
-
-### TODO: update the dataset
-
-The current dataset contains cache traces for all single target attacks with and without Leakuidator+ in Win-Chrome, Win-Tor, Mac-Intel-Safari, and Mac-M1-Chrome, as summarized in Table 2 in the paper. In addtion, it includes traces for the attack on Android-Chrome system and the experiment with Leakuidator in Win-Chrome system.
-
-The dataset will be updated in coming days/weeks to also contain the remaining traces for multi target attacks and the experiments under noise, as reported in the paper.
