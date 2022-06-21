@@ -34,7 +34,7 @@ After finishing these 4 steps, the reported results are as follows:
 - code block with the comment starting with "### [Multi Target Attacks]" shows the results for experiments with multi target attacks, reported in table 2 of the paper.
 - code block with the comment starting with "## [Average and Attack Accuracy plots]" correspond to figure 5 of the paper.
 
-To get a sense of reproducibility of the attack, reviewers can collect traces using one of the three systems Win-Chrome, Mac-Intel-Safari, or Mac-M1-Chrome detailed in table 4 of the paper, using the respective attack pages at USENIX_Artifact_Evaluation directory. To customize the targeted deanonymization attack demo for a target user of your choice, do the following:
+To run the attack from scratch, reviewers can collect traces using one of the three systems Win-Chrome, Mac-Intel-Safari, or Mac-M1-Chrome detailed in table 4 of the paper, using the respective attack pages at USENIX_Artifact_Evaluation directory. To customize the targeted deanonymization attack demo for a target user of your choice, do the following:
 1. Login to the attacker Youtube account (e.g., attacker@gmail.com) at youtube.com
 2. Upload a private video of at least 1 second duration in the attacker Youtube account. [Here](https://www.google.com/url?q=https://en.wikipedia.org/wiki/File:2001_space_travel.ogv&source=gmail-html&ust=1655925203656000&usg=AOvVaw32MUA7BVXqD87gM3gLj0Y0) is an example video you can use.
 3. Write down the identifier of the private video you created, called [video_id].
