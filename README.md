@@ -41,7 +41,7 @@ To get a sense of reproducibility of the attack, reviewers can collect traces us
 4. Share it privately only with the targeted victim you'd like to track (e.g. victim@gmail.com) -- see the guide here for more instructions: https://support.google.com/youtube/answer/157177
 5. Prepare the state dependent URL as follows: "https://www.youtube.com/embed/[video_id]?rel=0&amp;autoplay=1&mute=1"
 6. Change the "State-Dependent-URL" string in source code of each of these attack pages to this URL
-7. To experiment with the target state, log out of the attacker's youtube account, and login to the victim's youtube account. Then open the attack page, click the button, wait for the attack page to load the video, and then record the reported trace. Refresh the attack page and repeat 20 times.
+7. To experiment with the target state, log out of the attacker's youtube account, and login to the victim's youtube account. Then open the attack page (and click on the webpage for MacInteLSafari), wait for the attack page to load the video, and then record the reported trace. Refresh the attack page and repeat 20 times.
 8. To experiment with the non-target state, repeat the previous step, but either in incognito mode or being logged out of youtube.
 9. Put the collected traces into the template.json file in USENIX_Artifact_Evaluation directory. First 20 records should be for target state, and second 20 records should be for non-target state.
 10. Open https://colab.research.google.com/
