@@ -53,9 +53,9 @@ In the second phase, we provide a step by step instruction to demonstrate how th
 5. Prepare the state dependent URL as follows: "https://www.youtube.com/embed/[video_id_1]?rel=0&amp;autoplay=1&mute=1"
 6. Prepare the URL for the non-target state as follows: "https://www.youtube.com/embed/[video_id_2]?rel=0&amp;autoplay=1&mute=1"
 7. Prepare two attack pages page_1.html and page_2.html and change the "State-Dependent-URL" string in the source code of the attack pages to these two URLs: page_1 points to the URL at step 5 and page_2 points to the URL at step 6.
-8. Host the attack pages in a domain
+8. Host the attack pages on a web server (either local or remote). In particular, do not run the attack pages as local files (i.e., not served by a web server).
 9. Log out of the attacker’s youtube account, and login to the victim’s youtube account.
-10. Open two tabs in the browser. The first tab points to page_1 resembling the target state, and the second tab points to page_2 resembling the non-target state. Record the traces first in the target tab, then in the non-target tab, then again target tab, then non-target tab, ..., and repeated this at least 100 times. (to make the experiment easier, instead of manually performing this experiment, customize and use the scripts at the "automation_scripts" folder)
+10. Open two tabs in the browser. The first tab points to page_1 resembling the target state, and the second tab points to page_2 resembling the non-target state. Record the traces first in the target tab, then in the non-target tab, then again target tab, then non-target tab, ..., and repeat this at least 100 times. (to make the experiment easier, instead of manually performing this experiment, customize and use the scripts at the "automation_scripts" folder)
 11. Put the collected traces into the template.json file (100 target traces and 100 non-target traces).
 12. Open https://colab.research.google.com/
 13. Upload the USENIX_Artifact_Evaluation/test.ipynb file to Google Colab and open it
